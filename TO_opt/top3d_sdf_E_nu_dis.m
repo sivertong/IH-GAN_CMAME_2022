@@ -1,5 +1,10 @@
 % AN 169 LINE 3D TOPOLOGY OPITMIZATION CODE BY LIU AND TOVAR (JUL 2013)
 function [xPhys, zPhys, output] = top3d_sdf_E_nu_dis(nelx,nely,nelz,rmin)
+% clc;clear;
+nelx=30;
+nely=10;
+nelz=1;
+rmin=1.5;
 % target dis
 target_dis = [0,-0.207911690817759,-0.406736643075800,-0.587785252292473,...
             -0.743144825477394,-0.866025403784439,-0.951056516295154,...
@@ -24,7 +29,7 @@ target_dis = [0,-0.207911690817759,-0.406736643075800,-0.587785252292473,...
 Lamda = zeros(3*(nely+1)*(nelx+1)*(nelz+1),1);
 load_dis = -10;
 % USER-DEFINED LOOP PARAMETERS
-maxloop = inf;    % Maximum number of iterations
+maxloop = 300;    % Maximum number of iterations
 tolx = 0.000001;      % Terminarion criterion
 displayflag = 0;  % Display structure flag
 % USER-DEFINED MATERIAL PROPERTIES
@@ -156,13 +161,13 @@ function [cneq, ceq, gradc, gradceq] = myConstrFcn(X)
     zPhys(:) = (H*z(:))./Hs;
     
     % Load material properties
-    mat_prp = load('.\data\mat_prp.mat');
+    mat_prp = load('..\data\mat_prp.mat');
     mat_prp = mat_prp.mat_prp;
     % Load average point spacing
-    rr_ave = load('.\data\rr_ave_2d.mat');
+    rr_ave = load('..\data\rr_ave_2d.mat');
     rr_ave = rr_ave.rr_ave;
     % Load average position of neighboring points
-    p_bar = load('.\data\p_bar_2d.mat');
+    p_bar = load('..\data\p_bar_2d.matfdfds');
     p_bar = p_bar.p_bar_2d;
     % Find maximum E for normalization 
     xs = mat_prp(:,1); xs_max = max(xs);
@@ -216,7 +221,7 @@ function stop = myOutputFcn(X,optimValues,state,displayflag)
             figure(10); clf; display_3D(xPhys);
             dis_opt = U(target_dis_dof);
 %             save prop_HalfSin_VD xPhys dis_opt
-            save prop_FullSin_SDF xPhys dis_opt
+            save optdata
             figure(11);plot(target_dis,'*-');hold on; plot(U(target_dis_dof),'+-'); legend;
         otherwise
     end % switch

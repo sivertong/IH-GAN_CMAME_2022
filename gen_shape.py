@@ -13,6 +13,14 @@ from utils import ElapsedTimer, create_dir
 
 
 if __name__ == "__main__":
+
+    # optdata = sio.loadmat('cmpdata_422iter.mat')
+    # xPhys = optdata['xPhys'].reshape(-1,1)
+    # yPhys = optdata['yPhys'].reshape(-1,1)
+    # zPhys = optdata['zPhys'].reshape(-1,1)
+    # optdata = np.column_stack((xPhys, yPhys, zPhys))
+    optdata = sio.loadmat('testmaterialData.mat')
+    optdata = optdata['ans']
     
     # Arguments
     parser = argparse.ArgumentParser(description='Shape generation')
@@ -26,10 +34,14 @@ if __name__ == "__main__":
     save_interval = 0
     batch_size = 32
     
-    # Read data
-    X = np.load('data/dvar.npy') # design variables
-    C = np.load('data/mat_prp.npy') # material properties
-    
+    # # Read data
+    # X = np.load('data/dvar.npy') # design variables
+    # C = np.load('data/mat_prp.npy') # material properties
+
+    # 修改数据集
+    X = np.load('HomoDataSet/Output.npy') # design variables
+    C = np.load('HomodataSet/Input.npy') # material properties
+
     # Train/test split
     N = X.shape[0]
     split = int(0.8 * N)
@@ -55,9 +67,14 @@ if __name__ == "__main__":
         model.restore(save_dir=model_dir)
         
     # Generate synthetic design variables given target material properties
+
+
+
+    # opt_dir = 'opt'
+    # C_tgt = sio.loadmat('{}/tgt_prp.mat'.format(opt_dir))['prop']
+    # X_synth = model.synthesize(C_tgt)
     opt_dir = 'opt'
-    C_tgt = sio.loadmat('{}/tgt_prp.mat'.format(opt_dir))['prop']
-    X_synth = model.synthesize(C_tgt)
-    np.save('{}/dvar_synth.npy'.format(opt_dir), X_synth)
-    sio.savemat('{}/dvar_synth.mat'.format(opt_dir), {'vect':X_synth})
+    X_synth = model.synthesize(optdata)
+    np.save('{}/dvar_synth_3dim.npy'.format(opt_dir), X_synth)
+    sio.savemat('{}/dvar_synth_3dim.mat'.format(opt_dir), {'vect':X_synth})
     

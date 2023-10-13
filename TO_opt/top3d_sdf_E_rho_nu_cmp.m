@@ -1,4 +1,16 @@
 function [xPhys, yPhys, zPhys, output] = top3d_sdf_E_rho_nu_cmp(nelx,nely,nelz,volfrac,rmin)
+clc;clear;
+% nelx=30;
+% nely=10;
+% nelz=1;
+% volfrac=0.5;
+% rmin=3;
+
+nelx=30;
+nely=10;
+nelz=1;
+volfrac=0.5;
+rmin=3;
 % USER-DEFINED LOOP PARAMETERS
 maxloop = inf;    % Maximum number of iterations
 tolx = 0.00001;      % Terminarion criterion
@@ -35,6 +47,20 @@ edofMat = repmat(edofVec,1,24)+ ...
     3*(nely+1)*(nelx+1)+[0 1 2 3*nely + [3 4 5 0 1 2] -3 -2 -1]],nele,1); % Node indices for each element following the local node order (nele by 24)
 iK = reshape(kron(edofMat,ones(24,1))',24*24*nele,1);
 jK = reshape(kron(edofMat,ones(1,24))',24*24*nele,1); % Indices for global stiffness matrix
+
+%% add passive element 
+passive = zeros(nely,nelx,nelz);
+for k = 1:nelz
+for i = 1:nelx
+    for j = 1:nely
+        if sqrt((k-nelz)^2+(j-nely/2)^2+(i-nelx/3)^2)< nely/3
+            passive(j,i,k) = 1;
+        end
+    end
+end
+end
+
+
 % PREPARE FILTER
 iH = ones(nele*(2*(ceil(rmin)-1)+1)^2,1); % DO NOT UNDERSTAND!!!
 jH = ones(size(iH));
@@ -52,6 +78,9 @@ for k1 = 1:nelz
                         iH(k) = e1; % Element i
                         jH(k) = e2; % Surrounding element j
                         sH(k) = max(0,rmin-sqrt((i1-i2)^2+(j1-j2)^2+(k1-k2)^2)); % Filter kernel/weight factor
+                        if passive(j2,i2,k2) == 1 
+                            sH(k) = 0;
+                        end
                     end
                 end
             end
@@ -60,24 +89,36 @@ for k1 = 1:nelz
 end
 H = sparse(iH,jH,sH); % Weight factor for each element with surrounding elements (nele by nele)
 Hs = sum(H,2); % Denominator of Equation 21
+
+
+
+
+
+
+
 % INITIALIZE ITERATION
 X = zeros(nely, 3*nelx, nelz);
-x = repmat(E0,[nely,nelx,nelz]);   % Initialize Young's modulus at each site
-y = repmat(nu0,[nely,nelx,nelz]); % Initialize Poisson's ratio
-z = repmat(rho0,[nely,nelx,nelz]);  % Initialize volume fraction at each site
+x = repmat(E0,[nely,nelx,nelz]);  x(passive==1) = 1e10; % Initialize Young's modulus at each site
+y = repmat(nu0,[nely,nelx,nelz]); y(passive==1) = 1e10; % Initialize Poisson's ratio
+z = repmat(rho0,[nely,nelx,nelz]);z(passive==1) = 1e10; % Initialize volume fraction at each site
 X(:,1:nelx,:)=x;
 X(:,nelx+1:2*nelx,:)=y;
 X(:,2*nelx+1:3*nelx,:)=z;
 xPhys = x;
 yPhys = y;
 zPhys = z;
+
+
+
+
+
 % global ce % Shared between myfun and myHessianFcn
 A = [];
 B = [];
 Aeq = [];
 Beq = [];
 % LB = [20*ones(size(x)), 0.23*ones(size(y)), 0.26*ones(size(z))]; % Lower bound of the design variable
-LB = [0.01*ones(size(x)), 0.01*ones(size(y)), 0.01*ones(size(z))]; % Lower bound of the design variable
+LB = [zeros(size(x)), zeros(size(y)), zeros(size(z))]; % Lower bound of the design variable
 UB = [128*ones(size(x)),  0.328*ones(size(y)), ones(size(z))]; % Upper bound of the design variable
 % options = optimset('Algorithm','interior-point','TolX',tolx,'MaxIter',maxloop, 'MaxFunEvals',inf, 'Display','none', 'OutputFcn',@(X,optimValues,state) myOutputFcn(X,optimValues,state,displayflag), 'PlotFcns',@optimplotfval);
 options = optimoptions(@fmincon,'Display','iter','Algorithm','interior-point','StepTolerance',tolx,'MaxIterations',maxloop,'MaxFunctionEvaluations',inf,'ConstraintTolerance',1e-10,'HessianApproximation','bfgs',...
@@ -87,12 +128,15 @@ options = optimoptions(@fmincon,'Display','iter','Algorithm','interior-point','S
 % 'Display','none', 'OutputFcn',@(X,optimValues,state) myOutputFcn(X,optimValues,state,displayflag), 'PlotFcns',@optimplotfval);
 
 function f = myObjFcn(X)
-    x = X(:,1:nelx,:);
+    x = X(:,1:nelx,:);%x(passive==1) = 1e-10;
     y = X(:,nelx+1:2*nelx,:);
     z = X(:,2*nelx+1:3*nelx,:);
     xPhys(:) = (H*x(:))./Hs;
     yPhys(:) = (H*y(:))./Hs;
     zPhys(:) = (H*z(:))./Hs;
+    xPhys(passive==1) = nan;
+    yPhys(passive==1) = nan;
+    zPhys(passive==1) = nan;
     xPhysf = xPhys(:);
     yPhysf = yPhys(:);
     zPhysf = zPhys(:); 
@@ -104,12 +148,17 @@ function f = myObjFcn(X)
     % FE-ANALYSIS
 %     sK = reshape(KE*repmat((Emin+xPhys(:)'.^penal*(E0-Emin)),[nele,1]),24*24*nele,1);
     sK = reshape(sK,24*24*nele,1);
-    K = sparse(iK,jK,sK); K = (K+K')/2;
+    K = sparse(iK,jK,sK); K = (K+K')/2;FK = full(K);
     U(freedofs,:) = K(freedofs,freedofs)\F(freedofs,:);
+
+    
+    
+    
+    
     % OBJECTIVE FUNCTION AND SENSITIVITY ANALYSIS
     UE = U(edofMat);
     ce = [];
-    for j = 1:nely*nelx*nelz
+    for j = 1:nely*nelx*nelz %疑似重复计算
         ce = [ce; (UE(j,:)*lk_H8(yPhysf(i))).*UE(j,:)];
     end
     ce = reshape(sum(ce,2),[nely,nelx,nelz]);
@@ -130,15 +179,18 @@ function [cneq, ceq, gradc, gradceq] = myConstrFcn(X)
     xPhys(:) = (H*x(:))./Hs;
     yPhys(:) = (H*y(:))./Hs;
     zPhys(:) = (H*z(:))./Hs;   
+    xPhys(passive==1) = 1e-10;
+    yPhys(passive==1) = 1e-10;
+    zPhys(passive==1) = 1e-10;
     % Non-linear Constraints
     % Load material properties
-    mat_prp = load('.\data\mat_prp.mat');
+    mat_prp = load('..\data\mat_prp.mat');
     mat_prp = mat_prp.mat_prp;
     % Load average point spacing
-    rr_ave = load('.\data\rr_ave_3d.mat');
+    rr_ave = load('..\data\rr_ave_3d.mat');
     rr_ave = rr_ave.rr_ave;
     % Load average position of neighboring points
-    p_bar = load('.\data\p_bar_3d.mat');
+    p_bar = load('..\data\p_bar_3d.mat');
     p_bar = p_bar.ans;
     % Find maximum E for normalization 
     xs = mat_prp(:,1); xs_max = max(xs);
@@ -154,11 +206,16 @@ function [cneq, ceq, gradc, gradceq] = myConstrFcn(X)
     % Implicit signed distance field for nonlinear constraints
     cneq = [];
     for i = 1:nelx*nely*nelz
-        cneq1 = 1000*(((xPhys(i)/xs_max-xp(i))^2 + (yPhys(i)-yp(i))^2 + (zPhys(i)-zp(i))^2)^(0.5) - 2.0*rr_ave);
+        cneq1 = 1000*(((xPhys(i)/xs_max-xp(i))^2 + (yPhys(i)-yp(i))^2 + (zPhys(i)-zp(i))^2)^(0.5) - 8.0*rr_ave);
         cneq = [cneq cneq1];
     end
     cneq2 = sum(zPhys(:)) - volfrac*nele;
     cneq = [cneq cneq2];
+
+    cneq3 = 1e10*x(passive==1);
+    cneq4 = 1e10*y(passive==1);
+    cneq5 = 1e10*z(passive==1);
+    cneq = [cneq cneq3' cneq4' cneq5'];
     gradc = [];
     % Linear Constraints
     ceq     = [];
@@ -184,6 +241,7 @@ function stop = myOutputFcn(X,optimValues,state,displayflag)
             title([' It.:',sprintf('%5i',optimValues.iteration),...
                 ' Obj. = ',sprintf('%11.4f',optimValues.fval),...
                 ' ch.:',sprintf('%7.3f',optimValues.stepsize)]);
+
         case 'init'
             % Setup for plots or guis
             if displayflag
@@ -192,11 +250,12 @@ function stop = myOutputFcn(X,optimValues,state,displayflag)
         case 'done'
             % Cleanup of plots, guis, or final plot
             figure(10); clf; display_3D(zPhys);
+            save compdata_circle
         otherwise
     end % switch
 end % myOutputFcn
 
-output = fmincon(@myObjFcn, X, A, B, Aeq, Beq, LB, UB, @myConstrFcn, options);
+output = fmincon(@(X)myObjFcn(X), X, A, B, Aeq, Beq, LB, UB, @(X)myConstrFcn(X), options);
 end
 
 % === GENERATE ELEMENT STIFFNESS MATRIX ===

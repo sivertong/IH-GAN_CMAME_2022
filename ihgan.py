@@ -41,11 +41,11 @@ class Model(object):
             
             x = tf.layers.dense(x, 1024)
             x = tf.nn.leaky_relu(x, alpha=0.2)
-            
+ 
             # alpha1, alpha2, alpha3
             x_alpha = tf.layers.dense(x, self.n_classes)
             x_alpha = tf.nn.softmax(x_alpha)
-            
+
             # t1, t2, t3
             x_t = tf.layers.dense(x, self.dim_X-self.n_classes)
                 
